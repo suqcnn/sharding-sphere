@@ -23,18 +23,22 @@ import io.shardingsphere.core.api.algorithm.masterslave.MasterSlaveLoadBalanceAl
 import io.shardingsphere.core.api.config.MasterSlaveRuleConfiguration;
 import io.shardingsphere.core.exception.ShardingConfigurationException;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Master-slave rule configuration for yaml.
  *
  * @author caohao
+ * @author panjuan
  */
+@NoArgsConstructor
 @Getter
 @Setter
 public class YamlMasterSlaveRuleConfiguration {
@@ -50,6 +54,17 @@ public class YamlMasterSlaveRuleConfiguration {
     private String loadBalanceAlgorithmClassName;
     
     private Map<String, Object> configMap = new ConcurrentHashMap<>();
+    
+    private Properties props = new Properties();
+    
+    public YamlMasterSlaveRuleConfiguration(final MasterSlaveRuleConfiguration masterSlaveRuleConfiguration, final Map<String, Object> configMap, final Properties props) {
+        name = masterSlaveRuleConfiguration.getName();
+        masterDataSourceName = masterSlaveRuleConfiguration.getMasterDataSourceName();
+        slaveDataSourceNames = masterSlaveRuleConfiguration.getSlaveDataSourceNames();
+        loadBalanceAlgorithmClassName = null == masterSlaveRuleConfiguration.getLoadBalanceAlgorithm() ? null : masterSlaveRuleConfiguration.getLoadBalanceAlgorithm().getClass().getName();
+        this.configMap = configMap;
+        this.props = props;
+    }
     
     /**
      * Get master-slave rule configuration from yaml.

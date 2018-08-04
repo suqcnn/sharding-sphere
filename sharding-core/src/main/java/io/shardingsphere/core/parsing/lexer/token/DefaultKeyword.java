@@ -86,6 +86,9 @@ public enum DefaultKeyword implements Keyword {
     DISABLE,
     VALIDATE,
     USER,
+    ROLE,
+    LOGIN,
+    DENY,
     IDENTIFIED,
     
     /*
@@ -105,6 +108,7 @@ public enum DefaultKeyword implements Keyword {
     INSERT,
     INTO,
     VALUES,
+    DUPLICATE,
     
     /*
     Update

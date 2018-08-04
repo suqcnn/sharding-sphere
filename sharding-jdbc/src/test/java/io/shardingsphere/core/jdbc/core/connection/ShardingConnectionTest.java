@@ -20,11 +20,12 @@ package io.shardingsphere.core.jdbc.core.connection;
 import io.shardingsphere.core.api.config.MasterSlaveRuleConfiguration;
 import io.shardingsphere.core.api.config.ShardingRuleConfiguration;
 import io.shardingsphere.core.api.config.TableRuleConfiguration;
+import io.shardingsphere.core.constant.DatabaseType;
 import io.shardingsphere.core.fixture.TestDataSource;
 import io.shardingsphere.core.jdbc.core.ShardingContext;
 import io.shardingsphere.core.jdbc.core.datasource.MasterSlaveDataSource;
-import io.shardingsphere.core.jdbc.metadata.JDBCShardingMetaData;
-import io.shardingsphere.core.metadata.ShardingMetaData;
+import io.shardingsphere.core.metadata.table.ShardingTableMetaData;
+import io.shardingsphere.core.metadata.table.TableMetaData;
 import io.shardingsphere.core.rule.ShardingRule;
 import org.junit.After;
 import org.junit.Before;
@@ -37,6 +38,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -57,7 +59,7 @@ public final class ShardingConnectionTest {
         dataSourceMap.put("test_ds_master", masterDataSource);
         dataSourceMap.put("test_ds_slave", slaveDataSource);
         masterSlaveDataSource = new MasterSlaveDataSource(
-                dataSourceMap, new MasterSlaveRuleConfiguration("test_ds", "test_ds_master", Collections.singletonList("test_ds_slave")), Collections.<String, Object>emptyMap());
+                dataSourceMap, new MasterSlaveRuleConfiguration("test_ds", "test_ds_master", Collections.singletonList("test_ds_slave")), Collections.<String, Object>emptyMap(), new Properties());
         ((TestDataSource) slaveDataSource).setThrowExceptionWhenClosing(true);
     }
     
@@ -70,8 +72,7 @@ public final class ShardingConnectionTest {
         Map<String, DataSource> dataSourceMap = new HashMap<>(1, 1);
         dataSourceMap.put(DS_NAME, masterSlaveDataSource);
         ShardingRule shardingRule = new ShardingRule(shardingRuleConfig, dataSourceMap.keySet());
-        ShardingMetaData shardingMetaData = new JDBCShardingMetaData(dataSourceMap, shardingRule, null);
-        ShardingContext shardingContext = new ShardingContext(dataSourceMap, shardingRule, null, null, shardingMetaData, false);
+        ShardingContext shardingContext = new ShardingContext(dataSourceMap, shardingRule, DatabaseType.H2, null, new ShardingTableMetaData(Collections.<String, TableMetaData>emptyMap()), false);
         connection = new ShardingConnection(shardingContext);
     }
     
@@ -84,17 +85,17 @@ public final class ShardingConnectionTest {
     }
     
     @Test
-    public void assertGetConnectionFromCache() throws Exception {
+    public void assertGetConnectionFromCache() throws SQLException {
         assertSame(connection.getConnection(DS_NAME), connection.getConnection(DS_NAME));
     }
     
     @Test(expected = IllegalStateException.class)
-    public void assertGetConnectionFailure() throws Exception {
+    public void assertGetConnectionFailure() throws SQLException {
         connection.getConnection("not_exist");
     }
     
     @Test
-    public void assertRelease() throws Exception {
+    public void assertRelease() throws SQLException {
         Connection conn = connection.getConnection(DS_NAME);
         connection.release(conn);
         assertNotSame(conn, connection.getConnection(DS_NAME));

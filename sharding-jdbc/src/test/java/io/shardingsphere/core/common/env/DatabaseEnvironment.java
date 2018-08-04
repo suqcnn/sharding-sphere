@@ -53,7 +53,7 @@ public final class DatabaseEnvironment {
         SCHEMA.put(DatabaseType.H2, null);
         
         DRIVER_CLASS_NAME.put(DatabaseType.MySQL, com.mysql.jdbc.Driver.class.getName());
-        URL.put(DatabaseType.MySQL, "jdbc:mysql://db.mysql:3306/%s");
+        URL.put(DatabaseType.MySQL, "jdbc:mysql://db.mysql:3306/%s?serverTimezone=UTC&useSSL=false");
         USERNAME.put(DatabaseType.MySQL, "root");
         PASSWORD.put(DatabaseType.MySQL, "");
         SCHEMA.put(DatabaseType.MySQL, null);
@@ -71,7 +71,7 @@ public final class DatabaseEnvironment {
         SCHEMA.put(DatabaseType.SQLServer, null);
 
         DRIVER_CLASS_NAME.put(DatabaseType.Oracle, "oracle.jdbc.driver.OracleDriver");
-        URL.put(DatabaseType.Oracle, "jdbc:oracle:thin:@db.oracle:8521:db_1");
+        URL.put(DatabaseType.Oracle, "jdbc:oracle:thin:@db.oracle:1521:test");
         USERNAME.put(DatabaseType.Oracle, "jdbc");
         PASSWORD.put(DatabaseType.Oracle, "jdbc");
         SCHEMA.put(DatabaseType.Oracle, "%s");

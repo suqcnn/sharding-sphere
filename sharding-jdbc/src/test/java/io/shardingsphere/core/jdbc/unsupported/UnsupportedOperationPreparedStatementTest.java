@@ -18,8 +18,7 @@
 package io.shardingsphere.core.jdbc.unsupported;
 
 import io.shardingsphere.core.common.base.AbstractShardingJDBCDatabaseAndTableTest;
-import io.shardingsphere.core.constant.DatabaseType;
-import io.shardingsphere.core.integrate.sql.DatabaseTestSQL;
+import io.shardingsphere.core.jdbc.JDBCTestSQL;
 import io.shardingsphere.core.jdbc.core.connection.ShardingConnection;
 import org.junit.After;
 import org.junit.Before;
@@ -35,19 +34,15 @@ import java.util.List;
 
 public final class UnsupportedOperationPreparedStatementTest extends AbstractShardingJDBCDatabaseAndTableTest {
     
-    private List<ShardingConnection> shardingConnections = new ArrayList<>();
+    private final List<ShardingConnection> shardingConnections = new ArrayList<>();
     
-    private List<PreparedStatement> statements = new ArrayList<>();
-    
-    public UnsupportedOperationPreparedStatementTest(final DatabaseType databaseType) {
-        super(databaseType);
-    }
+    private final List<PreparedStatement> statements = new ArrayList<>();
     
     @Before
     public void init() {
         ShardingConnection shardingConnection = getShardingDataSource().getConnection();
         shardingConnections.add(shardingConnection);
-        PreparedStatement preparedStatement = shardingConnection.prepareStatement(DatabaseTestSQL.SELECT_WITH_ALIAS_SQL);
+        PreparedStatement preparedStatement = shardingConnection.prepareStatement(JDBCTestSQL.SELECT_WITH_ALIAS_SQL);
         statements.add(preparedStatement);
     }
     

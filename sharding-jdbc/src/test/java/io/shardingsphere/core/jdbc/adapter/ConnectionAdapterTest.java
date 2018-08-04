@@ -18,7 +18,6 @@
 package io.shardingsphere.core.jdbc.adapter;
 
 import io.shardingsphere.core.common.base.AbstractShardingJDBCDatabaseAndTableTest;
-import io.shardingsphere.core.constant.DatabaseType;
 import io.shardingsphere.core.jdbc.core.connection.ShardingConnection;
 import io.shardingsphere.core.jdbc.util.JDBCTestSQL;
 import org.junit.Test;
@@ -37,10 +36,6 @@ import static org.junit.Assert.assertTrue;
 public final class ConnectionAdapterTest extends AbstractShardingJDBCDatabaseAndTableTest {
 
     private String sql = JDBCTestSQL.SELECT_GROUP_BY_USER_ID_SQL;
-
-    public ConnectionAdapterTest(final DatabaseType databaseType) {
-        super(databaseType);
-    }
 
     @Test
     public void assertSetAutoCommit() throws SQLException {
@@ -109,10 +104,8 @@ public final class ConnectionAdapterTest extends AbstractShardingJDBCDatabaseAnd
             actual.setReadOnly(false);
             actual.createStatement().executeQuery(sql);
             assertReadOnly(actual, false);
-            if (DatabaseType.SQLServer != getCurrentDatabaseType()) {
-                actual.setReadOnly(true);
-                assertReadOnly(actual, true);
-            }
+            actual.setReadOnly(true);
+            assertReadOnly(actual, true);
         }
     }
 
@@ -124,6 +117,14 @@ public final class ConnectionAdapterTest extends AbstractShardingJDBCDatabaseAnd
             assertThat(each.isReadOnly(), is(readOnly));
         }
     }
+    
+    @Test
+    public void assertGetTransactionIsolation() throws SQLException {
+        try (ShardingConnection actual = getShardingDataSource().getConnection()) {
+            actual.createStatement().executeQuery(sql);
+            assertThat(actual.getTransactionIsolation(), is(Connection.TRANSACTION_READ_COMMITTED));
+        }
+    }
 
     @Test
     public void assertSetTransactionIsolation() throws SQLException {
@@ -132,10 +133,8 @@ public final class ConnectionAdapterTest extends AbstractShardingJDBCDatabaseAnd
             actual.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
             actual.createStatement().executeQuery(sql);
             assertTransactionIsolation(actual, Connection.TRANSACTION_SERIALIZABLE);
-            if (DatabaseType.Oracle != getCurrentDatabaseType()) {
-                actual.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-                assertTransactionIsolation(actual, Connection.TRANSACTION_READ_COMMITTED);
-            }
+            actual.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            assertTransactionIsolation(actual, Connection.TRANSACTION_READ_COMMITTED);
         }
     }
 

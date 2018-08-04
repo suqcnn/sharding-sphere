@@ -26,10 +26,11 @@ import io.shardingsphere.core.api.config.strategy.ComplexShardingStrategyConfigu
 import io.shardingsphere.core.constant.DatabaseType;
 import io.shardingsphere.core.constant.ShardingOperator;
 import io.shardingsphere.core.keygen.fixture.IncrementKeyGenerator;
-import io.shardingsphere.core.metadata.ShardingMetaData;
+import io.shardingsphere.core.metadata.table.ShardingTableMetaData;
 import io.shardingsphere.core.parsing.SQLParsingEngine;
 import io.shardingsphere.core.parsing.parser.context.condition.Column;
 import io.shardingsphere.core.parsing.parser.context.condition.Condition;
+import io.shardingsphere.core.parsing.parser.exception.SQLParsingException;
 import io.shardingsphere.core.parsing.parser.exception.SQLParsingUnsupportedException;
 import io.shardingsphere.core.parsing.parser.sql.dml.insert.InsertStatement;
 import io.shardingsphere.core.rule.ShardingRule;
@@ -93,8 +94,8 @@ public final class InsertStatementParserTest extends AbstractStatementParserTest
     @Test
     public void assertParseWithoutColumnsWithGenerateKeyColumnsWithoutParameter() {
         ShardingRule shardingRule = createShardingRuleWithGenerateKeyColumns();
-        ShardingMetaData shardingMetaData = createShardingMetaData();
-        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (10)", shardingRule, shardingMetaData);
+        ShardingTableMetaData shardingTableMetaData = createShardingTableMetaData();
+        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (10)", shardingRule, shardingTableMetaData);
         InsertStatement insertStatement = (InsertStatement) statementParser.parse(false);
         assertInsertStatementWithoutParameter(insertStatement);
     }
@@ -102,8 +103,8 @@ public final class InsertStatementParserTest extends AbstractStatementParserTest
     @Test
     public void assertParseWithoutColumnsWithGenerateKeyColumnsWithParameter() {
         ShardingRule shardingRule = createShardingRuleWithGenerateKeyColumns();
-        ShardingMetaData shardingMetaData = createShardingMetaData();
-        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (?)", shardingRule, shardingMetaData);
+        ShardingTableMetaData shardingTableMetaData = createShardingTableMetaData();
+        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (?)", shardingRule, shardingTableMetaData);
         InsertStatement insertStatement = (InsertStatement) statementParser.parse(false);
         assertInsertStatementWithParameter(insertStatement);
     }
@@ -111,8 +112,8 @@ public final class InsertStatementParserTest extends AbstractStatementParserTest
     @Test
     public void assertParseWithoutColumnsWithoutParameter() {
         ShardingRule shardingRule = createShardingRule();
-        ShardingMetaData shardingMetaData = createShardingMetaData();
-        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (10,20)", shardingRule, shardingMetaData);
+        ShardingTableMetaData shardingTableMetaData = createShardingTableMetaData();
+        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (10,20)", shardingRule, shardingTableMetaData);
         InsertStatement insertStatement = (InsertStatement) statementParser.parse(false);
         assertInsertStatementWithoutParameter(insertStatement);
     }
@@ -120,8 +121,8 @@ public final class InsertStatementParserTest extends AbstractStatementParserTest
     @Test
     public void assertParseWithoutColumnsWithParameter() {
         ShardingRule shardingRule = createShardingRule();
-        ShardingMetaData shardingMetaData = createShardingMetaData();
-        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (?, ?)", shardingRule, shardingMetaData);
+        ShardingTableMetaData shardingTableMetaData = createShardingTableMetaData();
+        SQLParsingEngine statementParser = new SQLParsingEngine(DatabaseType.MySQL, "INSERT INTO `TABLE_XXX` VALUES (?, ?)", shardingRule, shardingTableMetaData);
         InsertStatement insertStatement = (InsertStatement) statementParser.parse(false);
         assertInsertStatementWithParameter(insertStatement);
     }
@@ -167,13 +168,25 @@ public final class InsertStatementParserTest extends AbstractStatementParserTest
     @SuppressWarnings("unchecked")
     private void parseWithSpecialSyntax(final DatabaseType dbType, final String actualSQL) {
         ShardingRule shardingRule = createShardingRule();
-        ShardingMetaData shardingMetaData = createShardingMetaData();
-        InsertStatement insertStatement = (InsertStatement) new SQLParsingEngine(dbType, actualSQL, shardingRule, shardingMetaData).parse(false);
+        ShardingTableMetaData shardingTableMetaData = createShardingTableMetaData();
+        InsertStatement insertStatement = (InsertStatement) new SQLParsingEngine(dbType, actualSQL, shardingRule, shardingTableMetaData).parse(false);
         assertThat(insertStatement.getTables().find("TABLE_XXX").get().getName(), is("TABLE_XXX"));
         assertFalse(insertStatement.getTables().find("TABLE_XXX").get().getAlias().isPresent());
         Condition condition = insertStatement.getConditions().find(new Column("field1", "TABLE_XXX")).get();
         assertThat(condition.getOperator(), is(ShardingOperator.EQUAL));
         assertThat(((ListShardingValue<? extends Comparable>) condition.getShardingValue(Collections.emptyList())).getValues().iterator().next(), is((Comparable) 1));
+    }
+    
+    @Test
+    public void parseInsertOnDuplicateKeyUpdateWithNoShardingColumn() {
+        ShardingRule shardingRule = createShardingRule();
+        new SQLParsingEngine(DatabaseType.MySQL, "INSERT ALL INTO TABLE_XXX (field8) VALUES (field8) ON DUPLICATE KEY UPDATE field8 = VALUES(field8)", shardingRule, null).parse(false);
+    }
+    
+    @Test(expected = SQLParsingException.class)
+    public void parseInsertOnDuplicateKeyUpdateWithShardingColumn() {
+        ShardingRule shardingRule = createShardingRule();
+        new SQLParsingEngine(DatabaseType.MySQL, "INSERT ALL INTO TABLE_XXX (field1) VALUES (field1) ON DUPLICATE KEY UPDATE field1 = VALUES(field1)", shardingRule, null).parse(false);
     }
     
     @Test

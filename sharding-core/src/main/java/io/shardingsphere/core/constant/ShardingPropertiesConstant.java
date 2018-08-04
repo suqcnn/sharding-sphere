@@ -51,7 +51,36 @@ public enum ShardingPropertiesConstant {
      * Default: same with CPU cores.
      * </p>
      */
-    EXECUTOR_SIZE("executor.size", String.valueOf(Runtime.getRuntime().availableProcessors()), int.class);
+    EXECUTOR_SIZE("executor.size", String.valueOf(Runtime.getRuntime().availableProcessors()), int.class),
+    
+    /**
+     * Proxy mode.
+     *
+     * <p>
+     * MEMORY_STRICTLY:
+     * Proxy holds as many connections as the count of actual tables routed in a database.
+     * The benefit of this approach is saving memory for Proxy by Stream ResultSet.
+     * CONNECTION_STRICTLY:
+     * Proxy will release connections after get the overall rows from the ResultSet.
+     * Meanwhile, the cost of the memory will be increased.
+     * </p>
+     */
+    PROXY_MODE("proxy.mode", "MEMORY_STRICTLY", String.class),
+    
+    PROXY_TRANSACTION_MODE("proxy.transaction.mode", "NONE", String.class),
+    
+    /**
+     * Thread pool size of connect database for Sharding-Proxy.
+     *
+     * <p>Cannot change dynamically, change this value should restart proxy.</p>
+     */
+    PROXY_MAX_WORKING_THREADS("proxy.max.working.threads", Runtime.getRuntime().availableProcessors() * 2 + "", int.class),
+    
+    PROXY_BACKEND_USE_NIO("proxy.backend.use.nio", Boolean.FALSE.toString(), boolean.class),
+    
+    PROXY_BACKEND_SIMPLE_DB_CONNECTIONS("proxy.backend.simple.db.connections", 8 + "", int.class),
+    
+    PROXY_BACKEND_CONNECTION_TIMEOUT("proxy.backend.connection.timeout", 60 + "", int.class);
     
     private final String key;
     

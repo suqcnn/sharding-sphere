@@ -17,64 +17,133 @@
 
 package io.shardingsphere.proxy.frontend.mysql;
 
+import com.google.common.base.Optional;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.EventLoopGroup;
+import io.shardingsphere.proxy.backend.jdbc.connection.BackendConnection;
 import io.shardingsphere.proxy.frontend.common.FrontendHandler;
-import io.shardingsphere.proxy.transport.common.packet.DatabaseProtocolPacket;
-import io.shardingsphere.proxy.transport.mysql.constant.StatusFlag;
+import io.shardingsphere.proxy.frontend.common.executor.ExecutorGroup;
+import io.shardingsphere.proxy.transport.common.packet.DatabasePacket;
+import io.shardingsphere.proxy.transport.mysql.constant.ServerErrorCode;
 import io.shardingsphere.proxy.transport.mysql.packet.MySQLPacketPayload;
 import io.shardingsphere.proxy.transport.mysql.packet.command.CommandPacket;
 import io.shardingsphere.proxy.transport.mysql.packet.command.CommandPacketFactory;
+import io.shardingsphere.proxy.transport.mysql.packet.command.CommandResponsePackets;
+import io.shardingsphere.proxy.transport.mysql.packet.command.query.QueryCommandPacket;
+import io.shardingsphere.proxy.transport.mysql.packet.generic.EofPacket;
+import io.shardingsphere.proxy.transport.mysql.packet.generic.ErrPacket;
 import io.shardingsphere.proxy.transport.mysql.packet.generic.OKPacket;
-import io.shardingsphere.proxy.transport.mysql.packet.handshake.AuthPluginData;
+import io.shardingsphere.proxy.transport.mysql.packet.handshake.AuthorityHandler;
 import io.shardingsphere.proxy.transport.mysql.packet.handshake.ConnectionIdGenerator;
 import io.shardingsphere.proxy.transport.mysql.packet.handshake.HandshakePacket;
 import io.shardingsphere.proxy.transport.mysql.packet.handshake.HandshakeResponse41Packet;
+import io.shardingsphere.proxy.util.MySQLResultCache;
 import lombok.RequiredArgsConstructor;
+
+import java.sql.SQLException;
 
 /**
  * MySQL frontend handler.
  *
  * @author zhangliang
+ * @author panjuan
+ * @author wangkai
  */
 @RequiredArgsConstructor
 public final class MySQLFrontendHandler extends FrontendHandler {
     
-    private final EventLoopGroup eventLoopGroup;
-    
-    private AuthPluginData authPluginData;
+    private final AuthorityHandler authorityHandler = new AuthorityHandler();
     
     @Override
     protected void handshake(final ChannelHandlerContext context) {
-        authPluginData = new AuthPluginData();
-        context.writeAndFlush(new HandshakePacket(ConnectionIdGenerator.getInstance().nextId(), authPluginData));
+        int connectionId = ConnectionIdGenerator.getInstance().nextId();
+        MySQLResultCache.getInstance().putConnection(context.channel().id().asShortText(), connectionId);
+        context.writeAndFlush(new HandshakePacket(connectionId, authorityHandler.getAuthPluginData()));
     }
     
     @Override
     protected void auth(final ChannelHandlerContext context, final ByteBuf message) {
-        MySQLPacketPayload mysqlPacketPayload = new MySQLPacketPayload(message);
-        // TODO use authPluginData to auth
-        HandshakeResponse41Packet response41 = new HandshakeResponse41Packet(mysqlPacketPayload);
-        context.writeAndFlush(new OKPacket(response41.getSequenceId() + 1, 0L, 0L, StatusFlag.SERVER_STATUS_AUTOCOMMIT.getValue(), 0, ""));
+        try (MySQLPacketPayload payload = new MySQLPacketPayload(message)) {
+            HandshakeResponse41Packet response41 = new HandshakeResponse41Packet(payload);
+            if (authorityHandler.login(response41.getUsername(), response41.getAuthResponse())) {
+                context.writeAndFlush(new OKPacket(response41.getSequenceId() + 1));
+            } else {
+                // TODO localhost should replace to real ip address
+                context.writeAndFlush(new ErrPacket(response41.getSequenceId() + 1, 
+                        ServerErrorCode.ER_ACCESS_DENIED_ERROR, response41.getUsername(), "localhost", 0 == response41.getAuthResponse().length ? "NO" : "YES"));
+            }
+        }
     }
     
     @Override
     protected void executeCommand(final ChannelHandlerContext context, final ByteBuf message) {
-        eventLoopGroup.execute(new Runnable() {
-            
-            @Override
-            public void run() {
-                MySQLPacketPayload mysqlPacketPayload = new MySQLPacketPayload(message);
-                int sequenceId = mysqlPacketPayload.readInt1();
-                CommandPacket commandPacket = CommandPacketFactory.getCommandPacket(sequenceId, mysqlPacketPayload);
-                for (DatabaseProtocolPacket each : commandPacket.execute().getDatabaseProtocolPackets()) {
+        new ExecutorGroup(context.channel().id()).getExecutorService().execute(new CommandExecutor(context, message));
+    }
+    
+    @Override
+    public void channelWritabilityChanged(final ChannelHandlerContext context) {
+        if (context.channel().isWritable()) {
+            synchronized (this) {
+                this.notifyAll();
+            }
+        }
+    }
+    
+    @RequiredArgsConstructor
+    class CommandExecutor implements Runnable {
+        
+        private final ChannelHandlerContext context;
+        
+        private final ByteBuf message;
+        
+        private int currentSequenceId;
+        
+        @Override
+        public void run() {
+            try (MySQLPacketPayload payload = new MySQLPacketPayload(message);
+                 BackendConnection backendConnection = new BackendConnection()) {
+                CommandPacket commandPacket = getCommandPacket(payload, backendConnection);
+                Optional<CommandResponsePackets> responsePackets = commandPacket.execute();
+                if (!responsePackets.isPresent()) {
+                    return;
+                }
+                for (DatabasePacket each : responsePackets.get().getPackets()) {
                     context.writeAndFlush(each);
                 }
-                while (commandPacket.hasMoreResultValue()) {
-                    context.writeAndFlush(commandPacket.getResultValue());
+                if (commandPacket instanceof QueryCommandPacket && !(responsePackets.get().getHeadPacket() instanceof OKPacket) && !(responsePackets.get().getHeadPacket() instanceof ErrPacket)) {
+                    writeMoreResults((QueryCommandPacket) commandPacket, responsePackets.get().getPackets().size());
                 }
+            } catch (final SQLException ex) {
+                context.writeAndFlush(new ErrPacket(++currentSequenceId, ex));
+                // CHECKSTYLE: OFF
+            } catch (final Exception ex) {
+                // CHECKSTYLE: ON
+                context.writeAndFlush(new ErrPacket(1, ServerErrorCode.ER_STD_UNKNOWN_EXCEPTION, ex.getMessage()));
             }
-        });
+        }
+        
+        private CommandPacket getCommandPacket(final MySQLPacketPayload payload, final BackendConnection backendConnection) {
+            int sequenceId = payload.readInt1();
+            int connectionId = MySQLResultCache.getInstance().getConnection(context.channel().id().asShortText());
+            return CommandPacketFactory.getCommandPacket(sequenceId, connectionId, payload, backendConnection);
+        }
+        
+        private void writeMoreResults(final QueryCommandPacket queryCommandPacket, final int headPacketsCount) throws SQLException {
+            currentSequenceId = headPacketsCount;
+            while (queryCommandPacket.next()) {
+                while (!context.channel().isWritable()) {
+                    synchronized (MySQLFrontendHandler.this) {
+                        try {
+                            MySQLFrontendHandler.this.wait();
+                        } catch (final InterruptedException ignore) {
+                        }
+                    }
+                }
+                DatabasePacket resultValue = queryCommandPacket.getResultValue();
+                currentSequenceId = resultValue.getSequenceId();
+                context.writeAndFlush(resultValue);
+            }
+            context.writeAndFlush(new EofPacket(++currentSequenceId));
+        }
     }
 }
